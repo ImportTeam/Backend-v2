@@ -16,13 +16,14 @@ public interface SearchLogRepository extends JpaRepository<SearchLog, Long> {
     @Query("SELECT COUNT(l) FROM SearchLog l WHERE l.source = 'cache'")
     long countCacheHits();
 
+    // limit 파라미터를 실제로 적용하기 위해 Pageable 사용 (JPQL은 LIMIT :x 미지원)
     @Query("""
         SELECT l.queryName, COUNT(l) as cnt
         FROM SearchLog l
         GROUP BY l.queryName
         ORDER BY cnt DESC
         """)
-    List<Object[]> findPopularQueries(@Param("limit") int limit);
+    List<Object[]> findPopularQueries(Pageable pageable);
 
     // 주간 통계
     @Query(value = """

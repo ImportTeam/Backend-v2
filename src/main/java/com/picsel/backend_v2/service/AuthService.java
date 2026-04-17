@@ -29,10 +29,14 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class AuthService {
 
-    private static final String RATE_KEY_PREFIX    = "rate:login:";
-    private static final String BLACKLIST_PREFIX   = "blacklist:access:";
-    private static final int    MAX_LOGIN_ATTEMPTS = 5;
-    private static final long   RATE_WINDOW_SEC    = 60;
+    private static final String RATE_KEY_PREFIX      = "rate:login:";
+    private static final String RATE_REGISTER_PREFIX = "rate:register:";
+    private static final String RATE_REFRESH_PREFIX  = "rate:refresh:";
+    private static final String BLACKLIST_PREFIX      = "blacklist:access:";
+    private static final int    MAX_LOGIN_ATTEMPTS    = 5;
+    private static final int    MAX_REGISTER_ATTEMPTS = 10;
+    private static final int    MAX_REFRESH_ATTEMPTS  = 20;
+    private static final long   RATE_WINDOW_SEC       = 60;
 
     private final UserRepository userRepository;
     private final UserSessionRepository userSessionRepository;
@@ -44,6 +48,18 @@ public class AuthService {
     @Transactional
     public TokenResponse register(RegisterRequest dto) {
         String email = dto.getEmail().trim().toLowerCase();
+
+        // Rate Limiting — 1분 내 10회 초과 시 차단 (계정 대량 생성 방지)
+        String rateKey = RATE_REGISTER_PREFIX + email;
+        Long attempts = redis.opsForValue().increment(rateKey);
+        if (attempts != null && attempts == 1) {
+            redis.expire(rateKey, RATE_WINDOW_SEC, TimeUnit.SECONDS);
+        }
+        if (attempts != null && attempts > MAX_REGISTER_ATTEMPTS) {
+            long ttl = redis.getExpire(rateKey, TimeUnit.SECONDS);
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "너무 많은 요청입니다. " + ttl + "초 후 다시 시도해주세요.");
+        }
 
         if (userRepository.existsByEmail(email)) {
             throw new ApiException(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다.");
@@ -140,6 +156,16 @@ public class AuthService {
     public TokenResponse refreshTokens(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Refresh token required");
+        }
+
+        // Rate Limiting — 토큰 기반 1분 내 20회 초과 시 차단 (토큰 replay 남용 방지)
+        String rateKey = RATE_REFRESH_PREFIX + refreshToken.substring(Math.max(0, refreshToken.length() - 16));
+        Long attempts = redis.opsForValue().increment(rateKey);
+        if (attempts != null && attempts == 1) {
+            redis.expire(rateKey, RATE_WINDOW_SEC, TimeUnit.SECONDS);
+        }
+        if (attempts != null && attempts > MAX_REFRESH_ATTEMPTS) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "너무 많은 요청입니다. 잠시 후 다시 시도해주세요.");
         }
 
         if (!jwtTokenProvider.validateToken(refreshToken)) {

@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -99,7 +100,7 @@ public class PriceController {
         long cacheHits = searchLogRepository.countCacheHits();
         double hitRate = total > 0 ? Math.round(cacheHits * 1000.0 / total) / 10.0 : 0.0;
 
-        List<Object[]> popularRaw = searchLogRepository.findPopularQueries(5);
+        List<Object[]> popularRaw = searchLogRepository.findPopularQueries(PageRequest.of(0, 5));
         List<Map<String, Object>> popularQueries = popularRaw.stream().map(r -> {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
             m.put("query", r[0] != null ? r[0].toString() : "");
@@ -124,7 +125,8 @@ public class PriceController {
     @GetMapping("/popular")
     public ResponseEntity<Map<String, Object>> popular(
             @RequestParam(defaultValue = "10") int limit) {
-        List<Object[]> rows = searchLogRepository.findPopularQueries(limit);
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+        List<Object[]> rows = searchLogRepository.findPopularQueries(PageRequest.of(0, safeLimit));
         List<Map<String, Object>> queries = rows.stream().map(r -> {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
             m.put("query", r[0] != null ? r[0].toString() : "");

@@ -60,7 +60,8 @@ public class DashboardService {
      * 전체 인기 검색 상품 (public)
      */
     public List<Map<String, Object>> getPopularProducts(int limit) {
-        List<Object[]> rows = searchLogRepository.findPopularQueries(limit);
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+        List<Object[]> rows = searchLogRepository.findPopularQueries(PageRequest.of(0, safeLimit));
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object[] row : rows) {
             Map<String, Object> entry = new LinkedHashMap<>();
